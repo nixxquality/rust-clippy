@@ -74,6 +74,29 @@ declare_clippy_lint! {
 
 declare_lint_pass!(NeedlessBool => [NEEDLESS_BOOL]);
 
+fn condition_needs_parentheses(e: &Expr<'_>) -> bool {
+    let mut inner = e;
+    while let ExprKind::Binary(_, i, _)
+    | ExprKind::Call(i, _)
+    | ExprKind::Cast(i, _)
+    | ExprKind::Type(i, _)
+    | ExprKind::Index(i, _) = inner.kind
+    {
+        if matches!(
+            i.kind,
+            ExprKind::Block(..)
+                | ExprKind::ConstBlock(..)
+                | ExprKind::If(..)
+                | ExprKind::Loop(..)
+                | ExprKind::Match(..)
+        ) {
+            return true;
+        }
+        inner = i;
+    }
+    false
+}
+
 impl<'tcx> LateLintPass<'tcx> for NeedlessBool {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, e: &'tcx Expr<'_>) {
         use self::Expression::{Bool, RetBool};
@@ -97,6 +120,10 @@ impl<'tcx> LateLintPass<'tcx> for NeedlessBool {
 
                 if is_else_clause(cx.tcx, e) {
                     snip = snip.blockify();
+                }
+
+                if condition_needs_parentheses(cond) {
+                    snip = snip.maybe_par();
                 }
 
                 span_lint_and_sugg(
